@@ -1,0 +1,21 @@
+# Python
+analyzer/.venv/
+analyzer/__pycache__/
+analyzer/src/codemap/__pycache__/
+analyzer/**/__pycache__/
+analyzer/*.egg-info/
+analyzer/.mypy_cache/
+analyzer/.ruff_cache/
+*.pyc
+
+# Node
+web/node_modules/
+web/.next/
+web/.env.local
+
+# Output files
+graph.json
+/tmp/
+
+# OS
+.DS_Store
