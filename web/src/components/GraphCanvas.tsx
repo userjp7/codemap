@@ -2,13 +2,15 @@
 
 import '@xyflow/react/dist/style.css';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
   MiniMap,
   MarkerType,
+  useReactFlow,
   type Node,
   type Edge,
 } from '@xyflow/react';
@@ -19,7 +21,12 @@ import FileNode from '@/components/nodes/FileNode';
 import ExportNode from '@/components/nodes/ExportNode';
 import ExternalNode from '@/components/nodes/ExternalNode';
 import CircularEdge from '@/components/edges/CircularEdge';
-import type { FileNodeData } from '@/types/graph';
+import FilterSidebar from '@/components/FilterSidebar';
+import SearchBar from '@/components/SearchBar';
+import DetailPanel from '@/components/DetailPanel';
+import { getDefaultFilters, applyFilters, applySearch } from '@/lib/filters';
+import type { GraphFilters } from '@/lib/filters';
+import type { FileNodeData, GraphNode } from '@/types/graph';
 import type { ExternalNodeData } from '@/components/nodes/ExternalNode';
 
 // Defined outside the component so React Flow never re-registers node/edge types
@@ -34,33 +41,91 @@ const edgeTypes = {
   circular: CircularEdge,
 };
 
+// ── Inner flow component ─────────────────────────────────────────────────────
+// Must be a separate component so useReactFlow() runs inside ReactFlowProvider.
+
+interface FlowInnerProps {
+  nodes: Node[];
+  edges: Edge[];
+  selectedNode: GraphNode | null;
+  onNodeClick: (event: MouseEvent, node: Node) => void;
+  onCloseDetail: () => void;
+}
+
+function FlowInner({
+  nodes,
+  edges,
+  selectedNode,
+  onNodeClick,
+  onCloseDetail,
+}: FlowInnerProps) {
+  const { fitView } = useReactFlow();
+
+  const handleNavigateTo = useCallback(
+    (nodeId: string) => {
+      fitView({ nodes: [{ id: nodeId }], duration: 400 });
+    },
+    [fitView],
+  );
+
+  return (
+    <>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        onNodeClick={onNodeClick}
+        fitView
+        style={{ width: '100%', height: '100%' }}
+      >
+        <Background />
+        <Controls />
+        <MiniMap />
+      </ReactFlow>
+      <DetailPanel
+        node={selectedNode}
+        onClose={onCloseDetail}
+        onNavigateTo={handleNavigateTo}
+      />
+    </>
+  );
+}
+
+// ── Outer canvas component ───────────────────────────────────────────────────
+
 export default function GraphCanvas() {
   const { graph, loading, error } = useGraph();
+
+  // Base layouted nodes — set once after ELK resolves, never modified for filters.
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
+  // Derived: base nodes with opacity applied by filters + search.
+  const [visibleNodes, setVisibleNodes] = useState<Node[]>([]);
 
+  const [filters, setFilters] = useState<GraphFilters>(getDefaultFilters());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+
+  // Build React Flow nodes and edges from graph data and run ELK layout.
   useEffect(() => {
     if (!graph) return;
 
-    // Build a set of node IDs that participate in any circular chain.
     const circularNodeIds = new Set(graph.cycles.flat());
 
-    // Count how many local files import each external package.
     const importedByCount = new Map<string, number>();
     for (const e of graph.edges) {
       importedByCount.set(e.target, (importedByCount.get(e.target) ?? 0) + 1);
     }
 
-    // Convert graph nodes → React Flow nodes (position placeholder; ELK fills it in).
     const rfNodes: Node[] = graph.nodes.map((gn) => {
       if (gn.type === 'local') {
         const data: FileNodeData & Record<string, unknown> = {
           ...gn,
-          // RF node type "file" maps to the FileNode component.
           type: 'local',
           path: gn.id,
           hasCircularDep: circularNodeIds.has(gn.id),
-          // Strip the leading dot so FileNode renders ".tsx" not "..tsx".
+          // Strip the leading dot so FileNode renders "tsx" not ".tsx".
           extension: gn.extension.startsWith('.') ? gn.extension.slice(1) : gn.extension,
         };
         return { id: gn.id, type: 'file', position: { x: 0, y: 0 }, data };
@@ -74,7 +139,6 @@ export default function GraphCanvas() {
       }
     });
 
-    // Convert graph edges → React Flow edges; generate a stable id from source+target.
     const rfEdges: Edge[] = graph.edges.map((ge) => ({
       id: `${ge.source}--${ge.target}`,
       source: ge.source,
@@ -100,6 +164,15 @@ export default function GraphCanvas() {
     setEdges(rfEdges);
   }, [graph]);
 
+  // Re-apply filters and search whenever base nodes, filters, or query change.
+  useEffect(() => {
+    setVisibleNodes(applySearch(applyFilters(nodes, filters), searchQuery));
+  }, [nodes, filters, searchQuery]);
+
+  const handleNodeClick = useCallback((_event: MouseEvent, node: Node) => {
+    setSelectedNode(node.data as unknown as GraphNode);
+  }, []);
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -117,18 +190,34 @@ export default function GraphCanvas() {
   }
 
   return (
-    <div style={{ width: '100vw', height: '100vh' }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        fitView
-      >
-        <Background />
-        <Controls />
-        <MiniMap />
-      </ReactFlow>
+    <div style={{ display: 'flex', width: '100vw', height: '100vh' }}>
+      <FilterSidebar graph={graph} filters={filters} onChange={setFilters} />
+
+      <div style={{ flex: 1, position: 'relative' }}>
+        {/* Floating search bar centred at the top of the canvas */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 10,
+          }}
+        >
+          <SearchBar onSearch={setSearchQuery} />
+        </div>
+
+        {/* ReactFlowProvider lets FlowInner call useReactFlow() */}
+        <ReactFlowProvider>
+          <FlowInner
+            nodes={visibleNodes}
+            edges={edges}
+            selectedNode={selectedNode}
+            onNodeClick={handleNodeClick}
+            onCloseDetail={() => setSelectedNode(null)}
+          />
+        </ReactFlowProvider>
+      </div>
     </div>
   );
 }

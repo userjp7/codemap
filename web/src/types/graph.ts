@@ -10,6 +10,19 @@ export type ImportKind = "static" | "dynamic" | "reexport";
 /** High-level role of a file inferred from its path and contents. */
 export type FileCategory = "component" | "hook" | "service" | "utility" | "config";
 
+/**
+ * A single exported symbol from a source file, as resolved by the analyzer.
+ * Present only when the analyzer outputs per-symbol export data.
+ */
+export interface ExportEntry {
+  /** The exported symbol name (e.g. `"default"`, `"AuthProvider"`). */
+  name: string;
+  /** How the symbol is exported from this module. */
+  kind: ExportKind;
+  /** Number of other files that import this specific symbol. */
+  consumers: number;
+}
+
 /** Graph node representing a local source file in the scanned project. */
 export interface FileGraphNode {
   /** Unique node identifier — the file's relative path from the project root. */
@@ -36,6 +49,11 @@ export interface FileGraphNode {
   outDegree: number;
   /** Betweenness/degree centrality score. */
   centrality: number;
+  /**
+   * Per-symbol export list. Present only when the analyzer outputs this data;
+   * falls back to showing `exportCount` when absent.
+   */
+  exports?: ExportEntry[];
 }
 
 /** Graph node representing an external npm package. */
