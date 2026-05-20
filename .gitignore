@@ -6,16 +6,28 @@ analyzer/**/__pycache__/
 analyzer/*.egg-info/
 analyzer/.mypy_cache/
 analyzer/.ruff_cache/
+analyzer/.pytest_cache/
 *.pyc
+*.pyo
 
 # Node
 web/node_modules/
 web/.next/
+web/.env
 web/.env.local
+web/.env.*.local
+
+# TypeScript build artifacts
+*.tsbuildinfo
 
 # Output files
 graph.json
 /tmp/
 
+# Logs
+*.log
+npm-debug.log*
+
 # OS
 .DS_Store
+Thumbs.db
