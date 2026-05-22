@@ -4,15 +4,8 @@ import { useState } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import { FileCode2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import type { FileCategory, FileNodeData } from '@/types/graph';
-
-const CATEGORY_COLORS: Record<FileCategory, string> = {
-  component: '#1D9E75',
-  hook: '#7F77DD',
-  service: '#378ADD',
-  utility: '#BA7517',
-  config: '#888780',
-};
+import type { FileNodeData } from '@/types/graph';
+import { CATEGORY_COLORS } from '@/lib/constants';
 
 // FileNodeData is a concrete interface, not an index type, so we intersect
 // with Record<string,unknown> to satisfy @xyflow/react's generic constraint.

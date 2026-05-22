@@ -2,7 +2,7 @@
 
 import '@xyflow/react/dist/style.css';
 
-import { useCallback, useEffect, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -24,7 +24,7 @@ import CircularEdge from '@/components/edges/CircularEdge';
 import FilterSidebar from '@/components/FilterSidebar';
 import SearchBar from '@/components/SearchBar';
 import DetailPanel from '@/components/DetailPanel';
-import { getDefaultFilters, applyFilters, applySearch } from '@/lib/filters';
+import { getDefaultFilters, syncFiltersFromGraph, applyFilters, applySearch } from '@/lib/filters';
 import type { GraphFilters } from '@/lib/filters';
 import type { FileNodeData, GraphNode } from '@/types/graph';
 import type { ExternalNodeData } from '@/components/nodes/ExternalNode';
@@ -41,9 +41,7 @@ const edgeTypes = {
   circular: CircularEdge,
 };
 
-// ── Inner flow component ─────────────────────────────────────────────────────
-// Must be a separate component so useReactFlow() runs inside ReactFlowProvider.
-
+// Separate component so useReactFlow() runs inside ReactFlowProvider.
 interface FlowInnerProps {
   nodes: Node[];
   edges: Edge[];
@@ -92,22 +90,20 @@ function FlowInner({
   );
 }
 
-// ── Outer canvas component ───────────────────────────────────────────────────
-
 export default function GraphCanvas() {
   const { graph, loading, error } = useGraph();
 
-  // Base layouted nodes — set once after ELK resolves, never modified for filters.
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
-  // Derived: base nodes with opacity applied by filters + search.
-  const [visibleNodes, setVisibleNodes] = useState<Node[]>([]);
-
   const [filters, setFilters] = useState<GraphFilters>(getDefaultFilters());
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
 
-  // Build React Flow nodes and edges from graph data and run ELK layout.
+  const visibleNodes = useMemo(
+    () => applySearch(applyFilters(nodes, filters), searchQuery),
+    [nodes, filters, searchQuery],
+  );
+
   useEffect(() => {
     if (!graph) return;
 
@@ -131,6 +127,7 @@ export default function GraphCanvas() {
         return { id: gn.id, type: 'file', position: { x: 0, y: 0 }, data };
       } else {
         const data: ExternalNodeData & Record<string, unknown> = {
+          type: 'external' as const,
           packageName: gn.id,
           version: gn.version,
           importedBy: importedByCount.get(gn.id) ?? 0,
@@ -140,7 +137,7 @@ export default function GraphCanvas() {
     });
 
     const rfEdges: Edge[] = graph.edges.map((ge) => ({
-      id: `${ge.source}--${ge.target}`,
+      id: `${ge.source}--${ge.target}--${ge.kind}`,
       source: ge.source,
       target: ge.target,
       type: ge.isCircular ? 'circular' : 'default',
@@ -151,7 +148,7 @@ export default function GraphCanvas() {
 
     const rawNodes = graph.nodes.map((n) => ({ id: n.id }));
     const rawEdges = graph.edges.map((e) => ({
-      id: `${e.source}--${e.target}`,
+      id: `${e.source}--${e.target}--${e.kind}`,
       source: e.source,
       target: e.target,
     }));
@@ -162,12 +159,8 @@ export default function GraphCanvas() {
     });
 
     setEdges(rfEdges);
+    setFilters((prev) => syncFiltersFromGraph(prev, graph));
   }, [graph]);
-
-  // Re-apply filters and search whenever base nodes, filters, or query change.
-  useEffect(() => {
-    setVisibleNodes(applySearch(applyFilters(nodes, filters), searchQuery));
-  }, [nodes, filters, searchQuery]);
 
   const handleNodeClick = useCallback((_event: MouseEvent, node: Node) => {
     setSelectedNode(node.data as unknown as GraphNode);
@@ -194,7 +187,6 @@ export default function GraphCanvas() {
       <FilterSidebar graph={graph} filters={filters} onChange={setFilters} />
 
       <div style={{ flex: 1, position: 'relative' }}>
-        {/* Floating search bar centred at the top of the canvas */}
         <div
           style={{
             position: 'absolute',

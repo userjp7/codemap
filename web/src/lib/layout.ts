@@ -29,17 +29,12 @@ export interface PositionedNode {
 const DEFAULT_WIDTH = 220;
 const DEFAULT_HEIGHT = 80;
 
+// Module-level singleton — ELK construction is non-trivial and layout() is stateless between calls.
+const elk = new ELK();
+
 /**
  * Lay out `nodes` and `edges` with ELK's layered algorithm and return each
  * node's absolute position.
- *
- * ELK's `layout()` is async because the non-bundled build delegates work to a
- * Web Worker via `postMessage`. The bundled build used here still returns a
- * Promise for API consistency — `await` it normally.
- *
- * Top-level nodes are children of the synthetic root node that ELK creates
- * internally, so their `x`/`y` values in the result are absolute coordinates
- * and can be passed directly to React Flow (or any canvas library).
  *
  * @param nodes     Nodes to position; width/height fall back to 220×80.
  * @param edges     Directed edges expressed as `{ source, target }` pairs.
@@ -51,8 +46,6 @@ export async function applyElkLayout(
   edges: RawEdge[],
   direction: "TB" | "LR" = "TB",
 ): Promise<PositionedNode[]> {
-  const elk = new ELK();
-
   const elkDirection = direction === "LR" ? "RIGHT" : "DOWN";
 
   const graph: ElkNode = {

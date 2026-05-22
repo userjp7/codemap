@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Checkbox } from '@base-ui/react/checkbox';
 import { Switch } from '@base-ui/react/switch';
 import { Check } from 'lucide-react';
@@ -7,23 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import type { FileCategory, GraphOutput } from '@/types/graph';
 import type { GraphFilters } from '@/lib/filters';
-
-/** Color dot next to each category label — matches FileNode border colors. */
-const CATEGORY_COLORS: Record<FileCategory, string> = {
-  component: '#1D9E75',
-  hook: '#7F77DD',
-  service: '#378ADD',
-  utility: '#BA7517',
-  config: '#888780',
-};
-
-const ALL_CATEGORIES: FileCategory[] = [
-  'component',
-  'hook',
-  'service',
-  'utility',
-  'config',
-];
+import { CATEGORY_COLORS, ALL_CATEGORIES } from '@/lib/constants';
 
 /** Props for {@link FilterSidebar}. */
 export interface FilterSidebarProps {
@@ -41,52 +26,40 @@ export interface FilterSidebarProps {
  * nodes rather than removing them, so the ELK layout stays stable.
  */
 export default function FilterSidebar({ graph, filters, onChange }: FilterSidebarProps) {
-  // Derive the sorted list of extensions and top-level directories from graph data.
-  const extensions = graph
-    ? Array.from(
-        new Set(
-          graph.nodes
-            .filter((n) => n.type === 'local' && n.extension)
-            .map((n) => (n.type === 'local' ? (n.extension.startsWith('.') ? n.extension : `.${n.extension}`) : '')),
-        ),
-      ).sort()
-    : Array.from(filters.extensions).sort();
+  const extensions = useMemo(
+    () =>
+      graph
+        ? Array.from(
+            new Set(
+              graph.nodes
+                .filter((n) => n.type === 'local' && n.extension)
+                .map((n) => (n.type === 'local' ? (n.extension.startsWith('.') ? n.extension : `.${n.extension}`) : '')),
+            ),
+          ).sort()
+        : Array.from(filters.extensions).sort(),
+    [graph, filters.extensions],
+  );
 
-  const directories = graph
-    ? Array.from(
-        new Set(
-          graph.nodes
-            .filter((n) => n.type === 'local')
-            .map((n) => n.id.split('/')[0])
-            .filter(Boolean),
-        ),
-      ).sort()
-    : Array.from(filters.directories).sort();
+  const directories = useMemo(
+    () =>
+      graph
+        ? Array.from(
+            new Set(
+              graph.nodes
+                .filter((n) => n.type === 'local')
+                .map((n) => n.id.split('/')[0])
+                .filter(Boolean),
+            ),
+          ).sort()
+        : Array.from(filters.directories).sort(),
+    [graph, filters.directories],
+  );
 
-  function toggleSet<T>(set: Set<T>, value: T): Set<T> {
-    const next = new Set(set);
-    if (next.has(value)) next.delete(value);
-    else next.add(value);
+  function setFilter<T>(current: Set<T>, value: T, checked: boolean): Set<T> {
+    const next = new Set(current);
+    if (checked) next.add(value);
+    else next.delete(value);
     return next;
-  }
-
-  function handleCategory(cat: FileCategory, checked: boolean) {
-    const next = new Set(filters.categories);
-    if (checked) next.add(cat);
-    else next.delete(cat);
-    onChange({ ...filters, categories: next });
-  }
-
-  function handleExtension(ext: string, checked: boolean) {
-    const next = new Set(filters.extensions);
-    if (checked) next.add(ext);
-    else next.delete(ext);
-    onChange({ ...filters, extensions: next });
-  }
-
-  function handleDirectory(dir: string, checked: boolean) {
-    onChange({ ...filters, directories: toggleSet(filters.directories, dir) });
-    void checked; // used via toggleSet
   }
 
   return (
@@ -101,7 +74,6 @@ export default function FilterSidebar({ graph, filters, onChange }: FilterSideba
 
       <ScrollArea className="flex-1">
         <div className="space-y-5 px-4 py-4">
-          {/* ── Categories ── */}
           <section>
             <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Categories
@@ -113,7 +85,7 @@ export default function FilterSidebar({ graph, filters, onChange }: FilterSideba
                     id={`cat-${cat}`}
                     label={cat}
                     checked={filters.categories.has(cat)}
-                    onCheckedChange={(v) => handleCategory(cat, v)}
+                    onCheckedChange={(v) => onChange({ ...filters, categories: setFilter(filters.categories, cat, v) })}
                     dot={CATEGORY_COLORS[cat]}
                   />
                 </li>
@@ -123,7 +95,6 @@ export default function FilterSidebar({ graph, filters, onChange }: FilterSideba
 
           <Separator />
 
-          {/* ── Extensions ── */}
           <section>
             <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Extensions
@@ -138,7 +109,7 @@ export default function FilterSidebar({ graph, filters, onChange }: FilterSideba
                       id={`ext-${ext}`}
                       label={ext}
                       checked={filters.extensions.has(ext)}
-                      onCheckedChange={(v) => handleExtension(ext, v)}
+                      onCheckedChange={(v) => onChange({ ...filters, extensions: setFilter(filters.extensions, ext, v) })}
                     />
                   </li>
                 ))}
@@ -148,7 +119,6 @@ export default function FilterSidebar({ graph, filters, onChange }: FilterSideba
 
           <Separator />
 
-          {/* ── Directories ── */}
           <section>
             <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Directories
@@ -163,7 +133,7 @@ export default function FilterSidebar({ graph, filters, onChange }: FilterSideba
                       id={`dir-${dir}`}
                       label={dir}
                       checked={filters.directories.has(dir)}
-                      onCheckedChange={(v) => handleDirectory(dir, v)}
+                      onCheckedChange={(v) => onChange({ ...filters, directories: setFilter(filters.directories, dir, v) })}
                     />
                   </li>
                 ))}
@@ -173,7 +143,6 @@ export default function FilterSidebar({ graph, filters, onChange }: FilterSideba
 
           <Separator />
 
-          {/* ── Boolean toggles ── */}
           <section>
             <ul className="space-y-3">
               <li>

@@ -1,6 +1,7 @@
 import type { Node } from '@xyflow/react';
 import type { FileCategory, FileNodeData, GraphOutput } from '@/types/graph';
 import type { ExternalNodeData } from '@/components/nodes/ExternalNode';
+import { ALL_CATEGORIES } from '@/lib/constants';
 
 /** Active filter state for the graph canvas. */
 export interface GraphFilters {
@@ -16,19 +17,7 @@ export interface GraphFilters {
   showCircularOnly: boolean;
 }
 
-/** All known file categories. */
-const ALL_CATEGORIES: FileCategory[] = [
-  'component',
-  'hook',
-  'service',
-  'utility',
-  'config',
-];
-
-/**
- * Returns a default {@link GraphFilters} object with every filter enabled
- * and both boolean flags set to their permissive defaults.
- */
+/** Returns the default filter state with all categories and common extensions enabled. */
 export function getDefaultFilters(): GraphFilters {
   return {
     categories: new Set<FileCategory>(ALL_CATEGORIES),
@@ -40,60 +29,50 @@ export function getDefaultFilters(): GraphFilters {
 }
 
 /**
- * Derives the set of enabled extensions and directories from the graph, merging
- * them into an existing {@link GraphFilters} so that new values start enabled.
+ * Merges extensions and directories discovered in the graph into existing filters.
+ * Returns the same `filters` reference when nothing new was found, avoiding re-renders.
  */
 export function syncFiltersFromGraph(
   filters: GraphFilters,
   graph: GraphOutput,
 ): GraphFilters {
+  let changed = false;
   const extensions = new Set(filters.extensions);
   const directories = new Set(filters.directories);
 
   for (const node of graph.nodes) {
     if (node.type !== 'local') continue;
-    if (node.extension) extensions.add(node.extension);
+    if (node.extension) {
+      const ext = node.extension.startsWith('.') ? node.extension : `.${node.extension}`;
+      if (!extensions.has(ext)) { extensions.add(ext); changed = true; }
+    }
     const topDir = node.id.split('/')[0];
-    if (topDir) directories.add(topDir);
+    if (topDir && !directories.has(topDir)) { directories.add(topDir); changed = true; }
   }
 
-  return { ...filters, extensions, directories };
+  return changed ? { ...filters, extensions, directories } : filters;
 }
 
-/**
- * Applies the active {@link GraphFilters} to a list of React Flow nodes by
- * adjusting `style.opacity` — nodes that do not pass the filters get `0.15`
- * while matching nodes get `1`.  The array length never changes, keeping the
- * ELK layout stable.
- */
+/** Adjusts `style.opacity` for each node based on filter state. Array length is preserved to keep the ELK layout stable. */
 export function applyFilters(nodes: Node[], filters: GraphFilters): Node[] {
-  return nodes.map((node) => {
-    const visible = isNodeVisible(node, filters);
-    return {
-      ...node,
-      style: { ...node.style, opacity: visible ? 1 : 0.15 },
-    };
+  let dirty = false;
+  const next = nodes.map((node) => {
+    const opacity = isNodeVisible(node, filters) ? 1 : 0.15;
+    if ((node.style?.opacity ?? 1) === opacity) return node;
+    dirty = true;
+    return { ...node, style: { ...node.style, opacity } };
   });
+  return dirty ? next : nodes;
 }
 
-/**
- * Applies a text search query to a list of React Flow nodes by adjusting
- * `style.opacity`.  When `query` is empty every node is reset to full opacity.
- * Otherwise, nodes whose `filename`, `path` (local files) or `packageName`
- * (external packages) contain the query string (case-insensitive) get opacity
- * `1`; non-matching nodes get `0.15`.
- */
+/** Adjusts `style.opacity` based on a case-insensitive match against filename/path (local) or packageName (external). Returns `nodes` unchanged when `query` is empty. */
 export function applySearch(nodes: Node[], query: string): Node[] {
-  if (!query) {
-    return nodes.map((node) => ({
-      ...node,
-      style: { ...node.style, opacity: 1 },
-    }));
-  }
+  if (!query) return nodes;
 
   const q = query.toLowerCase();
+  let dirty = false;
 
-  return nodes.map((node) => {
+  const next = nodes.map((node) => {
     let matches = false;
 
     if (node.type === 'file') {
@@ -106,38 +85,31 @@ export function applySearch(nodes: Node[], query: string): Node[] {
       matches = data.packageName?.toLowerCase().includes(q) ?? false;
     }
 
-    return {
-      ...node,
-      style: { ...node.style, opacity: matches ? 1 : 0.15 },
-    };
+    const opacity = matches ? 1 : 0.15;
+    if ((node.style?.opacity ?? 1) === opacity) return node;
+    dirty = true;
+    return { ...node, style: { ...node.style, opacity } };
   });
+
+  return dirty ? next : nodes;
 }
 
 function isNodeVisible(node: Node, filters: GraphFilters): boolean {
-  const data = node.data as Partial<FileNodeData & { hasCircularDep?: boolean }>;
+  const data = node.data as Partial<FileNodeData>;
 
-  // External nodes
-  if (node.type === 'external') {
-    return filters.showExternals;
-  }
+  if (node.type === 'external') return filters.showExternals;
 
-  // Local file nodes
   if (node.type === 'file') {
     if (!filters.categories.has(data.category as FileCategory)) return false;
 
-    // Extension stored without leading dot in FileNode data (e.g. "ts" not ".ts")
+    // Node data stores extension without leading dot (stripped in GraphCanvas); re-add before lookup.
     const extWithDot = data.extension
-      ? data.extension.startsWith('.')
-        ? data.extension
-        : `.${data.extension}`
+      ? data.extension.startsWith('.') ? data.extension : `.${data.extension}`
       : '';
     if (extWithDot && !filters.extensions.has(extWithDot)) return false;
 
-    // Directory: first segment of the node id (which is the file path)
     const topDir = (node.id as string).split('/')[0];
-    if (filters.directories.size > 0 && topDir && !filters.directories.has(topDir)) {
-      return false;
-    }
+    if (filters.directories.size > 0 && topDir && !filters.directories.has(topDir)) return false;
 
     if (filters.showCircularOnly && !data.hasCircularDep) return false;
   }

@@ -30,7 +30,7 @@ export default function ExternalNode({ data }: NodeProps<ExternalNodeType>) {
         </span>
       </div>
 
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="target" position={Position.Top} />
     </div>
   );
 }

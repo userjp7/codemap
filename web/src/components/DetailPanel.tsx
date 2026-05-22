@@ -3,10 +3,10 @@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 import type { ExportEntry, FileCategory, FileNodeData, GraphNode } from '@/types/graph';
 import type { ExternalNodeData } from '@/components/nodes/ExternalNode';
-
-// ── Types ─────────────────────────────────────────────────────────────────────
+import { CATEGORY_COLORS } from '@/lib/constants';
 
 /** Props for {@link DetailPanel}. */
 export interface DetailPanelProps {
@@ -25,17 +25,6 @@ export interface DetailPanelProps {
   onNavigateTo: (nodeId: string) => void;
 }
 
-/** Category → label color token pairs, matching FileNode border colors. */
-const CATEGORY_COLORS: Record<FileCategory, string> = {
-  component: '#1D9E75',
-  hook:      '#7F77DD',
-  service:   '#378ADD',
-  utility:   '#BA7517',
-  config:    '#888780',
-};
-
-// ── Component ─────────────────────────────────────────────────────────────────
-
 /**
  * A slide-in detail panel fixed to the right edge of the viewport.
  *
@@ -50,12 +39,12 @@ export default function DetailPanel({ node, onClose, onNavigateTo }: DetailPanel
   return (
     <aside
       aria-label="Node details"
-      className={[
+      className={cn(
         'fixed right-0 top-0 z-50 flex h-full w-80 flex-col',
         'border-l border-border bg-background shadow-xl',
         'transition-transform duration-300 ease-in-out',
         node ? 'translate-x-0' : 'translate-x-full',
-      ].join(' ')}
+      )}
     >
       {node?.type === 'local' && (
         <FileDetail
@@ -74,8 +63,6 @@ export default function DetailPanel({ node, onClose, onNavigateTo }: DetailPanel
   );
 }
 
-// ── File detail ───────────────────────────────────────────────────────────────
-
 interface FileDetailProps {
   node: FileNodeData;
   onClose: () => void;
@@ -87,7 +74,6 @@ function FileDetail({ node, onClose, onNavigateTo }: FileDetailProps) {
 
   return (
     <>
-      {/* Header */}
       <div className="flex items-start gap-2 px-4 py-3">
         <div className="flex flex-1 flex-wrap items-center gap-1.5 min-w-0">
           <span className="truncate font-semibold text-sm">{node.filename}</span>
@@ -106,7 +92,6 @@ function FileDetail({ node, onClose, onNavigateTo }: FileDetailProps) {
       <ScrollArea className="flex-1">
         <div className="space-y-5 px-4 py-4">
 
-          {/* Path */}
           <section>
             <SectionLabel>Path</SectionLabel>
             <button
@@ -121,7 +106,6 @@ function FileDetail({ node, onClose, onNavigateTo }: FileDetailProps) {
 
           <Separator />
 
-          {/* Metrics */}
           <section>
             <SectionLabel>Metrics</SectionLabel>
             <div className="grid grid-cols-3 gap-2">
@@ -139,7 +123,6 @@ function FileDetail({ node, onClose, onNavigateTo }: FileDetailProps) {
 
           <Separator />
 
-          {/* Exports */}
           <section>
             <SectionLabel>
               Exports{' '}
@@ -150,7 +133,6 @@ function FileDetail({ node, onClose, onNavigateTo }: FileDetailProps) {
             <ExportsTable exports={node.exports} />
           </section>
 
-          {/* Circular dependency warning */}
           {node.hasCircularDep && (
             <>
               <Separator />
@@ -175,8 +157,6 @@ function FileDetail({ node, onClose, onNavigateTo }: FileDetailProps) {
   );
 }
 
-// ── External detail ───────────────────────────────────────────────────────────
-
 interface ExternalDetailProps {
   node: GraphNode & Partial<ExternalNodeData>;
   onClose: () => void;
@@ -184,12 +164,11 @@ interface ExternalDetailProps {
 
 function ExternalDetail({ node, onClose }: ExternalDetailProps) {
   const packageName = (node as Partial<ExternalNodeData>).packageName ?? node.id;
-  const version     = (node as Partial<ExternalNodeData>).version ?? (node.type === 'external' ? node.version : '');
+  const version     = (node as Partial<ExternalNodeData>).version ?? '';
   const importedBy  = (node as Partial<ExternalNodeData>).importedBy ?? 0;
 
   return (
     <>
-      {/* Header */}
       <div className="flex items-start gap-2 px-4 py-3">
         <div className="flex flex-1 flex-wrap items-center gap-1.5 min-w-0">
           <span className="truncate font-semibold text-sm">{packageName}</span>
@@ -210,8 +189,6 @@ function ExternalDetail({ node, onClose }: ExternalDetailProps) {
     </>
   );
 }
-
-// ── Exports table ─────────────────────────────────────────────────────────────
 
 function ExportsTable({ exports }: { exports?: ExportEntry[] }) {
   if (!exports || exports.length === 0) {
@@ -241,22 +218,15 @@ function ExportsTable({ exports }: { exports?: ExportEntry[] }) {
 }
 
 function ExportRow({ entry }: { entry: ExportEntry }) {
-  const clickable = entry.consumers > 0;
+  const hasConsumers = entry.consumers > 0;
   return (
-    <tr
-      className={[
-        'group py-1 transition-colors',
-        clickable ? 'cursor-default hover:bg-muted/50' : '',
-      ].join(' ')}
-    >
+    <tr className={cn('group py-1 transition-colors', hasConsumers && 'hover:bg-muted/50')}>
       <td className="py-1 pr-2 font-mono">{entry.name}</td>
       <td className="py-1 pr-2 text-muted-foreground">{entry.kind}</td>
       <td className="py-1 text-right tabular-nums">{entry.consumers}</td>
     </tr>
   );
 }
-
-// ── Shared primitives ─────────────────────────────────────────────────────────
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (

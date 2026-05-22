@@ -24,6 +24,8 @@ export default function SearchBar({ onSearch }: SearchBarProps) {
   onSearchRef.current = onSearch;
 
   useEffect(() => {
+    // Skip the debounce when the field is empty — handleClear fires onSearch('') directly.
+    if (!value) return;
     const id = setTimeout(() => onSearchRef.current(value), 200);
     return () => clearTimeout(id);
   }, [value]);
@@ -35,7 +37,6 @@ export default function SearchBar({ onSearch }: SearchBarProps) {
 
   return (
     <div className="relative flex w-[320px] items-center">
-      {/* Search icon */}
       <span
         className="pointer-events-none absolute left-3 text-muted-foreground"
         aria-hidden="true"
