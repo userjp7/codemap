@@ -24,6 +24,8 @@ from codemap.parser.export_extractor import extract_declarations, extract_export
 from codemap.parser.import_extractor import extract_imports
 from codemap.resolver.alias_resolver import load_aliases
 from codemap.resolver.path_resolver import resolve_import
+from codemap.serve import start_serve
+from codemap.watch import start_watch
 
 console = Console()
 app = typer.Typer(name="codemap", add_completion=False, no_args_is_help=True)
@@ -408,3 +410,52 @@ def inspect(
         met_table.add_row("[dim]Node not found in graph.[/dim]", "")
 
     console.print(Panel(met_table, title="[bold yellow]Metrics[/bold yellow]"))
+
+
+@app.command()
+def watch(
+    path: str = typer.Argument(..., help="Project root to watch"),
+    output: str = typer.Option("graph.json", "--output", "-o", help="Output path for the graph JSON"),
+    exclude: list[str] = typer.Option([], "--exclude", "-e", help="Extra glob patterns to exclude"),
+) -> None:
+    """Watch a project for file changes and rescan automatically."""
+    root = str(Path(path).resolve())
+    console.print(
+        Panel(
+            f"[bold cyan]Watching[/bold cyan] [green]{path}[/green]"
+            f" — [dim]writing to [bold]{output}[/bold][/dim]\n"
+            f"[dim]Ctrl+C to stop[/dim]",
+        )
+    )
+    # Perform an initial scan so graph.json is populated before any event fires.
+    with console.status("[dim]Initial scan…[/dim]", spinner="dots"):
+        files = discover_files(root, exclude=exclude or None)
+        G = build_graph(root, files)
+        analyze(G)
+        graph_output = serialize(G, root)
+        write_json(graph_output, output)
+    s = graph_output.stats
+    console.print(
+        f"[dim]↻[/dim]  Initial scan: [bold]{len(files)}[/bold] files"
+        f" — [cyan]{s.total_files}[/cyan] nodes, [cyan]{s.total_edges}[/cyan] edges"
+    )
+    start_watch(root, output, exclude)
+
+
+@app.command()
+def serve(
+    path: str = typer.Argument(..., help="Project root to serve"),
+    port: int = typer.Option(7331, "--port", "-p", help="TCP port to listen on"),
+    exclude: list[str] = typer.Option([], "--exclude", "-e", help="Extra glob patterns to exclude"),
+) -> None:
+    """Start an HTTP server that scans on demand and returns the graph JSON."""
+    root = str(Path(path).resolve())
+    console.print(
+        Panel(
+            f"[bold cyan]Serving codemap[/bold cyan]"
+            f" at [green]http://localhost:{port}/graph[/green]\n"
+            f"[dim]Set NEXT_PUBLIC_ANALYZER_URL=http://localhost:{port}"
+            f" in web/.env.local[/dim]",
+        )
+    )
+    start_serve(root, port, exclude)
