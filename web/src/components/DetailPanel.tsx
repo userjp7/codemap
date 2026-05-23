@@ -4,7 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import type { ExportEntry, FileCategory, FileNodeData, GraphNode } from '@/types/graph';
+import type { ExportEntry, FileNodeData, GraphNode } from '@/types/graph';
 import type { ExternalNodeData } from '@/components/nodes/ExternalNode';
 import { CATEGORY_COLORS } from '@/lib/constants';
 

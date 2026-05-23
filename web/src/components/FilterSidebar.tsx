@@ -6,7 +6,7 @@ import { Switch } from '@base-ui/react/switch';
 import { Check } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import type { FileCategory, GraphOutput } from '@/types/graph';
+import type { GraphOutput } from '@/types/graph';
 import type { GraphFilters } from '@/lib/filters';
 import { CATEGORY_COLORS, ALL_CATEGORIES } from '@/lib/constants';
 
