@@ -14,6 +14,7 @@ import {
   type Node,
   type Edge,
 } from '@xyflow/react';
+import { FolderOpen } from 'lucide-react';
 
 import { useGraph } from '@/hooks/useGraph';
 import { applyElkLayout } from '@/lib/layout';
@@ -24,6 +25,7 @@ import CircularEdge from '@/components/edges/CircularEdge';
 import FilterSidebar from '@/components/FilterSidebar';
 import SearchBar from '@/components/SearchBar';
 import DetailPanel from '@/components/DetailPanel';
+import FolderPicker from '@/components/FolderPicker';
 import { getDefaultFilters, syncFiltersFromGraph, applyFilters, applySearch } from '@/lib/filters';
 import type { GraphFilters } from '@/lib/filters';
 import type { FileNodeData, GraphNode } from '@/types/graph';
@@ -91,13 +93,14 @@ function FlowInner({
 }
 
 export default function GraphCanvas() {
-  const { graph, loading, error } = useGraph();
+  const { graph, loading, error, refetch } = useGraph();
 
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [filters, setFilters] = useState<GraphFilters>(getDefaultFilters());
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
 
   const visibleNodes = useMemo(
     () => applySearch(applyFilters(nodes, filters), searchQuery),
@@ -168,48 +171,91 @@ export default function GraphCanvas() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <p>Scanning codebase...</p>
+      <div className="flex h-screen items-center justify-center bg-zinc-950">
+        <p className="text-zinc-400">Scanning codebase…</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <p className="text-red-500">{error}</p>
-      </div>
+      <>
+        <div className="flex h-screen flex-col items-center justify-center gap-4 bg-zinc-950">
+          <p className="text-sm text-zinc-500">{error}</p>
+          <button
+            onClick={() => setShowPicker(true)}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-500"
+          >
+            <FolderOpen className="h-4 w-4" />
+            Select Project Folder
+          </button>
+        </div>
+        {showPicker && (
+          <FolderPicker
+            showCancel
+            onCancel={() => setShowPicker(false)}
+            onSelect={() => {
+              setShowPicker(false);
+              refetch();
+            }}
+          />
+        )}
+      </>
     );
   }
 
   return (
-    <div style={{ display: 'flex', width: '100vw', height: '100vh' }}>
-      <FilterSidebar graph={graph} filters={filters} onChange={setFilters} />
+    <>
+      <div style={{ display: 'flex', width: '100vw', height: '100vh' }}>
+        <FilterSidebar graph={graph} filters={filters} onChange={setFilters} />
 
-      <div style={{ flex: 1, position: 'relative' }}>
-        <div
-          style={{
-            position: 'absolute',
-            top: 12,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 10,
-          }}
-        >
-          <SearchBar onSearch={setSearchQuery} />
+        <div style={{ flex: 1, position: 'relative' }}>
+          <div
+            style={{
+              position: 'absolute',
+              top: 12,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 10,
+            }}
+          >
+            <SearchBar onSearch={setSearchQuery} />
+          </div>
+
+          {/* Change folder button */}
+          <button
+            onClick={() => setShowPicker(true)}
+            title="Change project folder"
+            style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}
+            className="flex items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 backdrop-blur hover:bg-zinc-800 hover:text-white"
+          >
+            <FolderOpen className="h-3.5 w-3.5" />
+            Change folder
+          </button>
+
+          {/* ReactFlowProvider lets FlowInner call useReactFlow() */}
+          <ReactFlowProvider>
+            <FlowInner
+              nodes={visibleNodes}
+              edges={edges}
+              selectedNode={selectedNode}
+              onNodeClick={handleNodeClick}
+              onCloseDetail={() => setSelectedNode(null)}
+            />
+          </ReactFlowProvider>
         </div>
-
-        {/* ReactFlowProvider lets FlowInner call useReactFlow() */}
-        <ReactFlowProvider>
-          <FlowInner
-            nodes={visibleNodes}
-            edges={edges}
-            selectedNode={selectedNode}
-            onNodeClick={handleNodeClick}
-            onCloseDetail={() => setSelectedNode(null)}
-          />
-        </ReactFlowProvider>
       </div>
-    </div>
+
+      {showPicker && (
+        <FolderPicker
+          showCancel
+          onCancel={() => setShowPicker(false)}
+          onSelect={() => {
+            setShowPicker(false);
+            refetch();
+          }}
+        />
+      )}
+    </>
   );
 }
